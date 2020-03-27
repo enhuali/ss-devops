@@ -1,0 +1,26 @@
+- name: Print kernel version
+  shell: echo {{KERNEL_VERSION}} | awk -F. -v OFS='.' '{print $1,$2}'
+  register: kernel_version
+
+- name: Print disk usage
+  shell: echo {{DISK_USAGE}}
+  register: disk_usage
+
+- name: Get the current kernel
+  shell: uname -r | awk -F. -v OFS='.' '{print $1,$2}'
+  register: kernel_current
+
+- debug: var="{{kernel_current.stdout}}"
+
+- name: Get boot disk current usage
+  shell: "df -h | grep boot|awk '{print $(NF-1)}' | tr -d %"
+  register: boot_current
+
+- debug: var="{{boot_current.stdout}}"
+
+- import_tasks: kernel_upgrade.yaml
+  when: kernel_current.stdout | float < kernel_version.stdout | float and boot_current.stdout | int < disk_usage.stdout | int
+
+- name: This version is greater than {{kernel_version.stdout}}
+  when: kernel_current.stdout | float >= kernel_version.stdout | float
+  shell: "echo 'No need to upgrade!'"

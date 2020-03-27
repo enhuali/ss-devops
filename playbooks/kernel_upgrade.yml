@@ -1,0 +1,9 @@
+---
+- name: Upgrade kernel
+  hosts: nodes
+  become: true
+  serial: 1
+  roles:
+    - kernel_upgrade
+  tags:
+    - kernel_upgrade

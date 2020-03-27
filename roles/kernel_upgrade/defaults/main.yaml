@@ -1,0 +1,9 @@
+# Download pages
+# http://elrepo.reloumirrors.net/kernel/el7/x86_64/RPMS/
+# http://hkg.mirror.rackspace.com/elrepo/kernel/el7/x86_64/RPMS/
+
+# The version to be upgraded
+KERNEL_VERSION: 4.4.217
+
+# Set disk usage not to exceed
+DISK_USAGE: 60

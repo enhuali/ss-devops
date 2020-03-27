@@ -1,0 +1,71 @@
+# http://elrepo.reloumirrors.net/kernel/el7/x86_64/RPMS/
+# http://hkg.mirror.rackspace.com/elrepo/kernel/el7/x86_64/RPMS/
+- name: Drain pod
+  shell: "{{KUBERNETES_BIN_DIR}}/kubectl drain {{ inventory_hostname }}"
+  ignore_errors: true
+
+- name: Get gpg-key file
+  copy:
+    src: "{{ role_path }}/files/RPM-GPG-KEY-elrepo.org"
+    dest: /tmp/RPM-GPG-KEY-elrepo.org
+
+- name: Install gpg-key
+  shell: rpm --import /tmp/RPM-GPG-KEY-elrepo.org
+
+- name: Get kernel-{{KERNEL_VERSION}}.rpm
+  copy:
+    src: "{{ role_path }}/files/kernel-{{KERNEL_VERSION}}.rpm"
+    dest: /tmp/kernel-{{KERNEL_VERSION}}.rpm
+
+- name: Install kernel-{{KERNEL_VERSION}}
+  yum:
+    name: /tmp/kernel-{{KERNEL_VERSION}}.rpm
+    state: present
+
+- name: Get the number for the version
+  shell: awk -F\' '$1=="menuentry\ "{print i++ "\ :\ " $2}' /etc/grub2.cfg |awk '/{{KERNEL_VERSION}}/ && $NF!="debugging"{print $1}'
+  register: kernel_number
+
+- name: Set the new kernel to the default version of grub2
+  lineinfile:
+    path: /etc/default/grub
+    regexp: "^GRUB_DEFAULT="
+    line: "GRUB_DEFAULT={{kernel_number.stdout}}"
+    backup: yes
+    create: no
+
+- name: Flush grub.cfg
+  shell: grub2-mkconfig -o /boot/grub2/grub.cfg
+
+- name: Reboot for system
+  shell: sleep 2 && shutdown -r now
+  async: 5
+  poll: 0
+
+- name: Determine if the machine is restarted
+  wait_for:
+    host: "{{ inventory_hostname }}"
+    port: 22
+    search_regex: OpenSSH
+    delay: 15
+    timeout: 300
+  delegate_to: localhost
+
+- name: Determine current version
+  shell: uname -r | awk -F. -v OFS='.' '{print $1,$2}'
+  register: kernel_now
+
+- name: Fail info1
+  fail:
+    msg: "The current version is not kernel_version.stdout, the update failed"
+  when: kernel_now.stdout | float != kernel_version.stdout | float
+
+- name: Judge whether the k8s node normally joins the node
+  shell: "{{ KUBERNETES_BIN_DIR }}/kubectl get node {{ inventory_hostname }}|awk 'NR>1{print $2}'"
+  register: node_status
+  until: node_status.stdout == "Ready" or node_status.stdout == "Ready,SchedulingDisabled"
+  retries: 8
+  delay: 8
+
+- name: Adjust the node to be schedulable
+  shell: "{{ KUBERNETES_BIN_DIR }}/kubectl uncordon {{ inventory_hostname }}"
